@@ -1,5 +1,5 @@
 # kube-TEST
-Start Kubernetes cluster in VM + prometheus, run :  " vagrant up "; 
+Start Kubernetes cluster in VM + prometheus, run :  " vagrant up "
 
 Prometheus:  http://192.168.205.11:30000/alerts 
 
