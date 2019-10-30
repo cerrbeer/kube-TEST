@@ -52,7 +52,7 @@ $configureBox = <<-SCRIPT
     deb http://apt.kubernetes.io/ kubernetes-xenial main
 EOF
     apt-get update
-    apt-get install -y kubelet kubeadm kubectl
+    apt-get install -y kubeadm=1.13\* kubectl=1.13\* kubelet=1.13\*
     apt-mark hold kubelet kubeadm kubectl
 
     # kubelet requires swap off
@@ -66,6 +66,18 @@ EOF
     # set node-ip
     sudo sed -i "/^[^#]*KUBELET_EXTRA_ARGS=/c\KUBELET_EXTRA_ARGS=--node-ip=$IP_ADDR" /etc/default/kubelet
     sudo systemctl restart kubelet
+	
+	# remove ubuntu-xenia entry
+    sed -e '/^.*ubuntu-xenial.*/d' -i /etc/hosts
+
+    # Update /etc/hosts about other hosts
+    cat >> /etc/hosts <<EOF
+    192.168.205.10  k8s-head
+    192.168.205.11  k8s-node-1
+    192.168.205.12  k8s-node-2
+    EOF
+	
+	
 SCRIPT
 
 $configureMaster = <<-SCRIPT
@@ -75,7 +87,7 @@ $configureMaster = <<-SCRIPT
 
     # install k8s master
     HOST_NAME=$(hostname -s)
-    kubeadm init --apiserver-advertise-address=$IP_ADDR --apiserver-cert-extra-sans=$IP_ADDR  --node-name $HOST_NAME --pod-network-cidr=172.16.0.0/16
+    kubeadm init --apiserver-advertise-address=$IP_ADDR --pod-network-cidr=10.244.0.0/16
 
     #copying credentials to regular user - vagrant
     sudo --user=vagrant mkdir -p /home/vagrant/.kube
@@ -86,6 +98,9 @@ $configureMaster = <<-SCRIPT
     export KUBECONFIG=/etc/kubernetes/admin.conf
     kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
     
+	kubectl create namespace monitoring
+	kubectl apply -f https://raw.githubusercontent.com/cerrbeer/kube-TEST/master/prometheus.yml	
+	
     kubeadm token create --print-join-command >> /etc/kubeadm_join_cmd.sh
     chmod +x /etc/kubeadm_join_cmd.sh
 
