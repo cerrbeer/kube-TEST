@@ -63,13 +63,13 @@ data:
           description: Prometheus can't scape metrics from kube-controller-manager(s).
           summary: Kube Controller Manager down
       - alert: NodeCpuHigh
-        expr: sum (rate (container_cpu_usage_seconds_total{id="/"}[15m])) / sum (machine_cpu_cores) * 100  > 85
+        expr: (sum(rate(container_cpu_usage_seconds_total{id="/", container_name!="POD"}[1m])) by (kubernetes_io_hostname) / sum(machine_cpu_cores) by (kubernetes_io_hostname)  * 100)  > 85
         for: 15m
         labels:
           severity: warning
         annotations:
-          summary: "High Node CPU load (instance {{ $labels.instance }})"
-          description: "Node CPU load is > 85%\n  VALUE = {{ $value }}\n  LABELS: {{ $labels }}"   
+          summary: Node {{$labels.kubernetes_io_hostname}} has more than 85% allocatable cpu used.
+          description: "Node CPU load is > 85%\n  VALUE = {{ $value }}\n  LABELS: {{ $labels.kubernetes_io_hostname }}"   
       - alert: NonPodCpuHigh
         expr: sum (rate (process_cpu_seconds_total[15m])) / sum (machine_cpu_cores) * 100  > 35
         for: 15m
@@ -79,13 +79,13 @@ data:
           summary: "High NonPod Processes CPU load (instance {{ $labels.instance }})"
           description: "High NonPod Processes CPU load is > 35%\n  VALUE = {{ $value }}\n  LABELS: {{ $labels }}" 
       - alert: PodMemoryHigh
-        expr: (sum(container_memory_usage_bytes) BY (ip) / sum(container_memory_max_usage_bytes) BY (ip) * 100) > 70
+        expr: (sum(kube_pod_container_resource_requests_memory_bytes) by (namespace, pod, node) * on (pod) group_left()  (sum(kube_pod_status_phase{phase="Running"}) by (pod, namespace) == 1) / sum(kube_pod_container_resource_limits_memory_bytes) by (namespace, pod, node) * on (pod) group_left()  (sum(kube_pod_status_phase{phase="Running"}) by (pod, namespace) == 1)) * 100 > 70
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "Pod Memory usage (instance)"
-          description: "Pod Memory usage is above 70%\n  VALUE = {{ $value }}\n  LABELS: {{ $labels }}"    
+          summary: "Pod named {{$labels.pod}} in {{$labels.namespace}} is using more than 70% of CPU Limit"
+          description: "Pod Memory usage is above 70%\n  VALUE = {{ $value }}\n  LABELS: {{$labels.pod}} in {{$labels.namespace}}"    
   prometheus.yml: |-
     global:
       scrape_interval: 5s
@@ -99,40 +99,12 @@ data:
         - targets:
           - "alertmanager.monitoring.svc:9093" 
     scrape_configs:
-     - job_name: 'kubernetes-apiservers'
-       kubernetes_sd_configs:
-       - role: endpoints
+     - job_name: kubernetes-nodes-cadvisor
+       scrape_interval: 10s
+       scrape_timeout: 10s
        scheme: https
        tls_config:
          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-         insecure_skip_verify: true
-       bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-       relabel_configs:
-       - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
-         action: keep
-         regex: default;kubernetes;https
-     - job_name: 'kubernetes-kubelet'
-       scheme: https
-       tls_config:
-         ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-         insecure_skip_verify: true
-       bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-       kubernetes_sd_configs:
-       - role: node
-       relabel_configs:
-       - action: labelmap
-         regex: __meta_kubernetes_node_label_(.+)
-       - target_label: __address__
-         replacement: 192.168.205.10:6443
-       - source_labels: [__meta_kubernetes_node_name]
-         regex: (.+)
-         target_label: __metrics_path__
-         replacement: /api/v1/nodes/${1}/proxy/metrics
-     - job_name: 'kubernetes-cadvisor'
-       scheme: https
-       tls_config:
-         ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-         insecure_skip_verify: true
        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
        kubernetes_sd_configs:
        - role: node
@@ -145,10 +117,52 @@ data:
          regex: (.+)
          target_label: __metrics_path__
          replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+       metric_relabel_configs:
+       - action: replace
+         source_labels: [id]
+         regex: '^/machine\.slice/machine-rkt\\x2d([^\\]+)\\.+/([^/]+)\.service$'
+         target_label: rkt_container_name
+         replacement: '${2}-${1}'
+       - action: replace
+         source_labels: [id]
+         regex: '^/system\.slice/(.+)\.service$'
+         target_label: systemd_service_name
+         replacement: '${1}'
+     - job_name: 'kubernetes-pods'
+       kubernetes_sd_configs:
+       - role: pod
+       relabel_configs:
+       - action: labelmap
+         regex: __meta_kubernetes_pod_label_(.+)     
+       - source_labels: [__meta_kubernetes_namespace]
+         action: replace
+         target_label: kubernetes_namespace
+       - source_labels: [__meta_kubernetes_pod_name]
+         action: replace
+         target_label: kubernetes_pod_name
+     - job_name: 'kubernetes-apiservers'
+       kubernetes_sd_configs:
+       - role: endpoints
+       scheme: https 
+       tls_config:
+         ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+       bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+       relabel_configs:
+       - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+         action: keep
+         regex: default;kubernetes;https
      - job_name: 'kubernetes-service-endpoints'
        kubernetes_sd_configs:
        - role: endpoints
        relabel_configs:
+       - action: labelmap
+         regex: __meta_kubernetes_service_label_(.+)
+       - source_labels: [__meta_kubernetes_namespace]
+         action: replace
+         target_label: kubernetes_namespace
+       - source_labels: [__meta_kubernetes_service_name]
+         action: replace
+         target_label: kubernetes_name
        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
          action: keep
          regex: true
@@ -163,16 +177,8 @@ data:
        - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
          action: replace
          target_label: __address__
-         regex: ([^:]+)(?::\d+)?;(\d+)
+         regex: (.+)(?::\d+);(\d+)
          replacement: $1:$2
-       - action: labelmap
-         regex: __meta_kubernetes_service_label_(.+)
-       - source_labels: [__meta_kubernetes_namespace]
-         action: replace
-         target_label: kubernetes_namespace
-       - source_labels: [__meta_kubernetes_service_name]
-         action: replace
-         target_label: kubernetes_name
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -231,3 +237,261 @@ spec:
       targetPort: 9090 
       nodePort: 30000
 ---
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+  namespace: monitoring
+  labels:
+    name: node-exporter
+spec:
+  template:
+    metadata:
+      labels:
+        name: node-exporter
+      annotations:
+         prometheus.io/scrape: "true"
+         prometheus.io/port: "9100"
+    spec:
+      hostPID: true
+      hostIPC: true
+      hostNetwork: true
+      containers:
+        - name: node-exporter
+          image: prom/node-exporter:v0.16.0
+          securityContext:
+            privileged: true
+          args:
+            - --path.procfs=/host/proc
+            - --path.sysfs=/host/sys
+          ports:
+            - containerPort: 9100
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 100m
+              memory: 100Mi
+            requests:
+              cpu: 10m
+              memory: 100Mi
+          volumeMounts:
+            - name: dev
+              mountPath: /host/dev
+            - name: proc
+              mountPath: /host/proc
+            - name: sys
+              mountPath: /host/sys
+            - name: rootfs
+              mountPath: /rootfs
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: dev
+          hostPath:
+            path: /dev
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: rootfs
+          hostPath:
+            path: /
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/version: v1.8.0
+  name: kube-state-metrics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-state-metrics
+subjects:
+- kind: ServiceAccount
+  name: kube-state-metrics
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/version: v1.8.0
+  name: kube-state-metrics
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  - nodes
+  - pods
+  - services
+  - resourcequotas
+  - replicationcontrollers
+  - limitranges
+  - persistentvolumeclaims
+  - persistentvolumes
+  - namespaces
+  - endpoints
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - extensions
+  resources:
+  - daemonsets
+  - deployments
+  - replicasets
+  - ingresses
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - statefulsets
+  - daemonsets
+  - deployments
+  - replicasets
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - cronjobs
+  - jobs
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - autoscaling
+  resources:
+  - horizontalpodautoscalers
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - certificates.k8s.io
+  resources:
+  - certificatesigningrequests
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - storageclasses
+  - volumeattachments
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - networkpolicies
+  verbs:
+  - list
+  - watch
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/version: v1.8.0
+  name: kube-state-metrics
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kube-state-metrics
+        app.kubernetes.io/version: v1.8.0
+    spec:
+      containers:
+      - image: quay.io/coreos/kube-state-metrics:v1.8.0
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 5
+          timeoutSeconds: 5
+        name: kube-state-metrics
+        ports:
+        - containerPort: 8080
+          name: http-metrics
+        - containerPort: 8081
+          name: telemetry
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8081
+          initialDelaySeconds: 5
+          timeoutSeconds: 5
+      nodeSelector:
+        kubernetes.io/hostname: k8s-node-1
+      serviceAccountName: kube-state-metrics
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/version: v1.8.0
+  name: kube-state-metrics
+  namespace: kube-system
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/version: v1.8.0
+  name: kube-state-metrics
+  namespace: kube-system
+spec:
+  clusterIP: None
+  ports:
+  - name: http-metrics
+    port: 8080
+    targetPort: http-metrics
+  - name: telemetry
+    port: 8081
+    targetPort: telemetry
+  selector:
+    app.kubernetes.io/name: kube-state-metrics
