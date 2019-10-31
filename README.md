@@ -48,3 +48,18 @@ Alerts:
         annotations:
           summary: "Pod named {{$labels.pod}} in {{$labels.node}} is using more than 70% of CPU Limit"
           description: "Pod Memory usage is above 70%\n  VALUE = {{ $value }}\n  LABELS: {{$labels.pod}} in {{$labels.node}}"    
+
+
+
+Test Cases:
+
+1. Stop container kube-controller-manager-k8s-head  
+
+2,3. Run  "sudo stress --cpu 8 -v --timeout 900s"  on k8s-node-1
+
+4. Run: 
+
+kubectl run resource-consumer --image=gcr.io/kubernetes-e2e-test-images/resource-consumer:1.4 --expose --service-overrides='{ "spec": { "type": "LoadBalancer" } }' --port 8181 --requests='cpu=500m,memory=256Mi'
+
+
+curl --data "millicores=300&durationSec=600" http://<EXTERNAL-IP>:8181/ConsumeCPU
