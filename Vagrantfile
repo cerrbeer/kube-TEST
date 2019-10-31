@@ -54,7 +54,8 @@ EOF
     apt-get update
     apt-get install -y kubeadm=1.13\* kubectl=1.13\* kubelet=1.13\*
     apt-mark hold kubelet kubeadm kubectl
-
+    apt-get install stress    
+	
     # kubelet requires swap off
     swapoff -a
 
@@ -97,14 +98,14 @@ $configureMaster = <<-SCRIPT
     # install Flanell pod network addon
     export KUBECONFIG=/etc/kubernetes/admin.conf
     kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
-    
-	kubectl create namespace monitoring
-	kubectl apply -f https://raw.githubusercontent.com/cerrbeer/kube-TEST/master/prometheus.yml	
-	
+    	
     kubeadm token create --print-join-command >> /etc/kubeadm_join_cmd.sh
     chmod +x /etc/kubeadm_join_cmd.sh
 
-    # required for setting up password less ssh between guest VMs
+    kubectl create namespace monitoring
+	kubectl apply -f https://raw.githubusercontent.com/cerrbeer/kube-TEST/master/prometheus.yml	
+	
+	# required for setting up password less ssh between guest VMs
     sudo sed -i "/^[^#]*PasswordAuthentication[[:space:]]no/c\PasswordAuthentication yes" /etc/ssh/sshd_config
     sudo service sshd restart
 
