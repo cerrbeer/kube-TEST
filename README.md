@@ -62,4 +62,4 @@ Test Cases:
 kubectl run resource-consumer --image=gcr.io/kubernetes-e2e-test-images/resource-consumer:1.4 --expose --service-overrides='{ "spec": { "type": "LoadBalancer" } }' --port 8181 --requests='cpu=500m,memory=256Mi'
 
 
-curl --data "millicores=300&durationSec=600" http://<EXTERNAL-IP>:8181/ConsumeCPU
+curl --data "megabytes=3000&durationSec=900" http://<EXTERNAL-IP>:8181/ConsumeMem
