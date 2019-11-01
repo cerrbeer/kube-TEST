@@ -46,8 +46,8 @@ Alerts:
         labels:
           severity: warning
         annotations:
-          summary: "Pod named {{$labels.pod}} in {{$labels.node}} is using more than 70% of CPU Limit"
-          description: "Pod Memory usage is above 70%\n  VALUE = {{ $value }}\n  LABELS: {{$labels.pod}} in {{$labels.node}}"    
+          summary: "Pods in {{$labels.node}} is using more than 70% of memory Limit"
+          description: "Pods Memory usage is above 70%\n  VALUE = {{ $value }}\n  LABELS: {{$labels.node}}"    
 
 
 
