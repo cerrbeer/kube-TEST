@@ -41,7 +41,7 @@ Alerts:
      
      
      - alert: PodMemoryHigh
-        expr: sum(kube_pod_container_resource_requests_memory_bytes) by (node) / sum(kube_node_status_allocatable_memory_bytes) by (node) * 100 > 70
+        expr: round(100 *label_join(sum(container_memory_usage_bytes{container_name != "POD", image !=""}) by (container_name, pod_name, namespace, node_name), "node", "", "node_name") / on (node) group_left sum(kube_node_status_allocatable_memory_bytes) by (node)) > 70
         for: 1m
         labels:
           severity: warning
@@ -61,7 +61,7 @@ Test Cases:
 
 4. Run: 
 
-kubectl run resource-consumer --image=gcr.io/kubernetes-e2e-test-images/resource-consumer:1.4 --expose --service-overrides='{ "spec": { "type": "LoadBalancer" } }' --port 8181 --requests='cpu=500m,memory=3560Mi'
+kubectl run resource-consumer --image=gcr.io/kubernetes-e2e-test-images/resource-consumer:1.4 --expose --port 8080 --requests='cpu=500m,memory=3560Mi'
 
 
 curl --data "megabytes=3000&durationSec=900" http://<EXTERNAL-IP>:8181/ConsumeMem
