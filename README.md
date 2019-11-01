@@ -31,7 +31,7 @@ Alerts:
       
       
       - alert: NonPodCpuHigh
-        expr: round(100 *label_join(sum(container_memory_usage_bytes{container_name != "POD", image !=""}) by (container_name, pod_name, namespace, node_name), "node", "", "node_name") / on (node)  group_left sum(kube_node_status_allocatable_memory_bytes) by (node)) > 35
+        expr: sum(rate(container_cpu_usage_seconds_total{id="/", container_name!="POD"}[15m])) by (kubernetes_io_hostname) * 100 > 35
         for: 1m
         labels:
           severity: warning
