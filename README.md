@@ -61,7 +61,9 @@ Test Cases:
 
 4. Run: 
 
-kubectl run resource-consumer --image=gcr.io/kubernetes-e2e-test-images/resource-consumer:1.4 --expose --port 8080 --requests='cpu=500m,memory=3560Mi'
+kubectl run resource-consumer --image=gcr.io/kubernetes-e2e-test-images/resource-consumer:1.4 --expose --port 8181 --requests='cpu=500m,memory=3560Mi'
 
 
-curl --data "megabytes=3000&durationSec=900" http://<EXTERNAL-IP>:8181/ConsumeMem
+curl --data "millicores=2000&durationSec=600" http://${consumerIP}:8181/ConsumeCPU
+
+curl --data "megabytes=3000&durationSec=900" http://${consumerIP}:8181/ConsumeMem
