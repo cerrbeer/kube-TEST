@@ -41,7 +41,7 @@ Alerts:
      
      
      - alert: PodMemoryHigh
-        expr: round(100 *label_join(sum(container_memory_usage_bytes{container_name != "POD", image !=""}) by (container_name, pod_name, namespace, node_name), "node", "", "node_name") / on (node) group_left sum(kube_node_status_allocatable_memory_bytes) by (node)) > 70
+        expr: round(100 *label_join(sum(container_memory_usage_bytes{container_name != "POD", image !=""}) by (container_name, pod_name, namespace, node_name), "node", "", "node_name")) / on (node) group_left sum(kube_node_status_allocatable_memory_bytes) by (node) > 70
         for: 1m
         labels:
           severity: warning
