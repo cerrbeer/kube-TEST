@@ -57,21 +57,23 @@ Test Cases:
 
 1. Stop container kube-controller-manager-k8s-head  
 
+2. First 4 item run "kubectl run resource-consumer ... " after 
+  
+   " curl --data "millicores=2000&durationSec=600" http://${consumerIP}:8181/ConsumeCPU "
+
 3. Run  "sudo stress --cpu 8 -v --timeout 900s"  on k8s-node-1
 
-2,4. Run: 
+4. Run: 
 
 kubectl run resource-consumer --image=gcr.io/kubernetes-e2e-test-images/resource-consumer:1.4 --expose --port 8181 --requests='cpu=500m,memory=3560Mi'
 
 a) get clusterIP of the service: 
-   export clusterIP=$(kubectl get svc resource-consumer -o jsonpath='{.spec.clusterIP}')
+   export consumerIP=$(kubectl get svc resource-consumer -o jsonpath='{.spec.clusterIP}')
 
 b) prepare container to run stress tests: 
 
 	kubectl run --generator=run-pod/v1 runner --image=nginx --env=consumerIP=$clusterIP --rm -it -- sh
 	If you don't see a command prompt, try pressing enter.
 	# apt-get update && apt-get install curl
-
-curl --data "millicores=2000&durationSec=600" http://${consumerIP}:8181/ConsumeCPU
 
 curl --data "megabytes=3000&durationSec=900" http://${consumerIP}:8181/ConsumeMem
