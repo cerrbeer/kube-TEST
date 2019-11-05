@@ -79,7 +79,7 @@ data:
           summary: "High NonPod Processes CPU load (instance {{ $labels.instance }})"
           description: "High NonPod Processes CPU load is > 35%\n  VALUE = {{ $value }}\n  LABELS: {{ $labels }}" 
       - alert: PodMemoryHigh
-        expr: sum(kube_pod_container_resource_requests_memory_bytes) by (node) / sum(kube_node_status_allocatable_memory_bytes) by (node) * 100 > 70
+        expr: round(100 *label_join(sum(container_memory_usage_bytes{container_name != "POD", image !=""}) by (container_name, pod_name, namespace, kubernetes_io_hostname), "node", "", "kubernetes_io_hostname") / on (node) group_left sum(kube_node_status_allocatable_memory_bytes) by (node)) > 70
         for: 1m
         labels:
           severity: warning
