@@ -41,7 +41,7 @@ Alerts:
      
      
      - alert: PodMemoryHigh
-        expr: round(100 *label_join(sum(container_memory_usage_bytes{container_name != "POD", image !=""}) by (container_name, pod_name, namespace, node_name), "node", "", "node_name")) / on (node) group_left sum(kube_node_status_allocatable_memory_bytes) by (node) > 70
+        expr: round(100 *label_join(sum(container_memory_usage_bytes{container_name != "POD", image !=""}) by (container_name, pod_name, namespace, kubernetes_io_hostname), "node", "", "kubernetes_io_hostname") / on (node) group_left sum(kube_node_status_allocatable_memory_bytes) by (node)) > 70
         for: 1m
         labels:
           severity: warning
@@ -57,12 +57,20 @@ Test Cases:
 
 1. Stop container kube-controller-manager-k8s-head  
 
-2,3. Run  "sudo stress --cpu 8 -v --timeout 900s"  on k8s-node-1
+3. Run  "sudo stress --cpu 8 -v --timeout 900s"  on k8s-node-1
 
-4. Run: 
+2,4. Run: 
 
 kubectl run resource-consumer --image=gcr.io/kubernetes-e2e-test-images/resource-consumer:1.4 --expose --port 8181 --requests='cpu=500m,memory=3560Mi'
 
+a) get clusterIP of the service: 
+   export clusterIP=$(kubectl get svc resource-consumer -o jsonpath='{.spec.clusterIP}')
+
+b) prepare container to run stress tests: 
+
+	kubectl run --generator=run-pod/v1 runner --image=nginx --env=consumerIP=$clusterIP --rm -it -- sh
+	If you don't see a command prompt, try pressing enter.
+	# apt-get update && apt-get install curl
 
 curl --data "millicores=2000&durationSec=600" http://${consumerIP}:8181/ConsumeCPU
 
