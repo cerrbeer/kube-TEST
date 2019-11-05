@@ -84,8 +84,8 @@ data:
         labels:
           severity: warning
         annotations:
-          summary: "Pod named {{$labels.pod}} in {{$labels.node}} is using more than 70% of CPU Limit"
-          description: "Pod Memory usage is above 70%\n  VALUE = {{ $value }}\n  LABELS: {{$labels.pod}} in {{$labels.node}}"    
+          summary: "Pod named {{$labels.pod_name}} in {{$labels.node}} is using more than 70% of CPU Limit"
+          description: "Pod Memory usage is above 70%\n  VALUE = {{ $value }}\n  LABELS: {{$labels.pod_name}} in {{$labels.node}}"    
   prometheus.yml: |-
     global:
       scrape_interval: 5s
